@@ -1,30 +1,43 @@
-import requests
+from operator import le
 from bs4 import BeautifulSoup
 import pandas as pd
 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import json
+
+
 url = 'https://www.volkswagenag.com/en/group/portrait-and-production-plants.html'
-response = requests.get(url)
-if response.status_code != 200:
-    print("Error fetching page")
-    exit()
-else:
-    content = response.content
+s = Service(r"C:\Users\v-huiywang\webdriver\chromedriver.exe")
+driver = webdriver.Chrome(service = s)
+driver.get(url) 
 
-# parse data from the html into a beautifulsoup object
-# soup = BeautifulSoup(response.text, 'html.parser')
-soup = BeautifulSoup(response.content, 'html.parser')
-page_data = soup.select('#section_510890826 > div.maps.abstractContentComponent.parbase.section > div > div')
-print(page_data.prettify)
+# Locate the control.
+elem = driver.find_element(by = By.ID, value = "mapData1")
+data_map = elem.get_attribute("data-map")
+# convert string to json object list
+list_object = json.loads(data_map)
 
-# df = pd.read_html(str(table))
-# # convert list to dataframe
-# df = pd.DataFrame(df[0])
-# print(df.head())
+map_data_list = []
 
-# # drop the unwanted columns
-# df.drop(columns=['PlantVIN IDcode(s)', 'Formervehicleproduction', 'Number ofemployees', 'Plantcoordinates'])
-# # rename the column name
-# df.rename(columns={"Location(continent,country)": "country", "Location(town / city,state / region)": "location"})
+for obj_dict in list_object:
+    map_dic = {}
+    map_dic["PlantName"] = obj_dict["tooltip"]["name"]
 
-# # Export to csv
-# df.to_csv('test.csv', index=False)
+    source_code = obj_dict["tooltip"]["copytext"]
+    soup = BeautifulSoup(source_code, features = "lxml")
+    map_dic["Products"] = soup.find("p", {"class": "singlecolumntext"}).text.replace("Products:", "").replace("\n", "")
+
+    map_dic["mappath"] = obj_dict["mappath"].replace("worldwide:", "")
+    map_dic["subline"] = obj_dict["tooltip"]["subline"].replace("<br>", " ")
+    map_data_list.append(map_dic)
+
+# Convert Json object of list to a string
+json_str = json.dumps(map_data_list)
+print(type(json_str))
+df = pd.read_json(json_str)
+df.to_csv("volkswagen.csv")
